@@ -1,0 +1,123 @@
+#include <Wire.h>
+#include <ESP8266WiFi.h>; 
+#include <PubSubClient.h>;
+
+const char* ssid = "3301LAB";
+const char* password = "33013415";
+const char* mqttServer = "140.138.139.172";  // MQTT伺服器位址
+const char* mqttUserName = "3627";  // 使用者名稱，隨意設定。
+const char* mqttPwd = "3627";  // MQTT密碼
+const char* clientID = "Jerry";      // 用戶端ID，隨意設定。
+const char* topic = "windSensor/EnduranceTest";
+ 
+unsigned long prevMillis = 0;  // 暫存經過時間（毫秒）
+String msgStr = "";      // 暫存MQTT訊息字串
+
+int bytes_to_int(byte bytes1, byte bytes2){
+  unsigned long combined = 0;
+  combined = (bytes2 << 8) | (bytes1);
+  return combined;
+}
+
+WiFiClient espClient;
+PubSubClient client(espClient);
+
+void setup_wifi() {
+  delay(10);
+ 
+  WiFi.begin(ssid, password);
+ 
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+ 
+  Serial.println("");
+  Serial.println("WiFi connected");
+}
+ 
+void reconnect() {
+  while (!client.connected()) {
+    if (client.connect(clientID, mqttUserName, mqttPwd)) {
+      Serial.println("MQTT connected");
+    } else {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      Serial.println(" try again in 5 seconds");
+      delay(5000);  // 等5秒之後再重試
+    }
+  }
+}
+
+void setup(){
+Wire.begin();
+Wire.setClock(10000);
+Serial.begin(9600);//9600
+setup_wifi();
+client.setServer(mqttServer, 1884);
+Serial.println("\nI2C Scanner");
+Serial.println("Scanning...");
+}
+
+
+void loop(){
+byte error;
+int address_1 = 121;
+int S_num;
+int message;
+byte byte1, byte2, byte3, byte4;
+int Sensor_data=-1;
+//Sensor #0 :96, Sensor #1 :97, Sensor #2 :98, Sensor #3 :99, Sensor #4 :100, Sensor #5 :101, Sensor #7 :103, Sensor #10 :106, Sensor #16 :112, Sensor #17 :113, Sensor #22 :118, Sensor #25 :121.
+
+
+int message_index = 0;
+Serial.println("Sensor #0");
+Wire.beginTransmission(address_1);
+Wire.write(67);
+Wire.endTransmission(false);
+Wire.requestFrom(address_1, 3);
+while(Wire.available()){
+Serial.print("Wire.available():");
+Serial.println(Wire.available());
+if (message_index == 0){
+byte1 = Wire.read();
+Serial.print("byte 1");
+Serial.println(byte1);
+message_index ++;
+}else if (message_index == 1){
+byte2 = Wire.read();
+Serial.print("byte 2");
+Serial.println(byte2);
+}
+}
+Serial.print("Wind Velocity (mm/s):");
+Sensor_data = bytes_to_int(byte1, byte2);
+Serial.println(Sensor_data);
+
+//Serial.println("done\n");
+//delay(2000); // wait 5 seconds for next scan
+
+ 
+  // 組合MQTT訊息；
+  msgStr=msgStr + "{\"sensor_test_mms\":" + 1 + 10 +"}";
+    
+  // 宣告字元陣列
+byte arrSize = msgStr.length() + 1;
+char msg[arrSize];
+ 
+Serial.print("Publish message: ");
+Serial.println(msgStr);
+msgStr.toCharArray(msg, arrSize); // 把String字串轉換成字元陣列格式
+bool pub_suc = client.publish(topic, msg);
+while (!pub_suc){  // 發布MQTT主題與訊息
+  Serial.println("MQTT disconnected, reconnecting...");
+  if (!client.connected()) {
+    reconnect();
+  pub_suc = client.publish(topic, msg);
+}
+}
+client.loop(); // 發布MQTT主題與訊息
+msgStr = "";
+delay(14000);
+Serial.println("-----------------------------------New Cycle------------------------------------------------------");
+}
